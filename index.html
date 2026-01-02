@@ -486,18 +486,14 @@
     </footer>
 
     <script>
-       // Configuração
+        // Configuração
         const SHEET_ID = '2PACX-1vShib7PQcrDNa8GDJqwUZcopaKqJ5azAs8_fG7aYyWCJwLy9bHykiHR7yIQrWRp7cZClH9RFtjq0PqQ';
-        
-        // --- ALTERAÇÃO AQUI: Criamos um número único (timestamp) para evitar que o Google entregue dados velhos ---
-        const cacheBuster = new Date().getTime();
-        
-        // Link CSV direto com o "cacheBuster"
-        const SHEET_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv&t=${cacheBuster}`;
+        // Link CSV direto
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
         
         const COLORS = {
-            joao: '#f83d03',   // João Campos
-            raquel: '#024796', // Raquel Lyra
+            joao: '#f83d03',  
+            raquel: '#024796', 
             neutral: '#e5e7eb',
             hover: '#333333'
         };
@@ -551,7 +547,6 @@
             errorMessage.innerText = '';
 
             // Estratégia de Proxies: Tenta o primeiro, se falhar, tenta o segundo
-            // --- ALTERAÇÃO AQUI: Adicionamos o cacheBuster também na chamada do proxy ---
             const proxies = [
                 `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}`,
                 `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}`
@@ -562,7 +557,7 @@
 
             for (const proxyUrl of proxies) {
                 try {
-                    console.log(`Tentando baixar dados...`);
+                    console.log(`Tentando baixar dados via: ${proxyUrl.substring(0, 30)}...`);
                     const response = await fetch(proxyUrl);
                     if (response.ok) {
                         csvText = await response.text();
@@ -572,7 +567,7 @@
                         }
                     }
                 } catch (e) {
-                    console.warn(`Falha no proxy, tentando próximo...`, e);
+                    console.warn(`Falha no proxy ${proxyUrl}:`, e);
                 }
             }
 
@@ -599,7 +594,14 @@
                     
                     const cells = parseCSVLine(row);
                     
-                    // 0: id, 1: City, 2: Mayor, 3: OldParty, 4: NewParty, 5: PhotoUrl, 6: RAQUEL OU JOÃO?
+                    // Com base na sua info:
+                    // 0: id
+                    // 1: City
+                    // 2: Mayor
+                    // 3: OldParty
+                    // 4: NewParty
+                    // 5: PhotoUrl
+                    // 6: RAQUEL OU JOÃO?
 
                     if (cells.length < 2) return;
 
@@ -677,20 +679,19 @@
                     element.style.fill = color;
                 }
 
-                // Adiciona os eventos diretamente ao elemento
-                // IMPORTANTE: Removemos event listeners antigos clonando o elemento
-                const newElement = element.cloneNode(true);
-                element.parentNode.replaceChild(newElement, element);
-
-                newElement.addEventListener('mouseover', (e) => {
+                // Adiciona os eventos diretamente ao elemento (seja <g> ou <path>)
+                console.log(`Anexando eventos para: ${cityId}`); // Log para depuração
+                // Isso substitui a necessidade do cloneNode
+                // Usamos mouseover para lidar melhor com grupos <g>
+                element.addEventListener('mouseover', (e) => {
                     // Traz o elemento para a "frente" para garantir que o hover seja visível
-                    if (newElement.parentNode) {
-                        newElement.parentNode.appendChild(newElement);
+                    if (element.parentNode) {
+                        element.parentNode.appendChild(element);
                     }
                     showTooltip(e, data)
                 });
-                newElement.addEventListener('mousemove', (e) => moveTooltip(e));
-                newElement.addEventListener('mouseout', hideTooltip);
+                element.addEventListener('mousemove', (e) => moveTooltip(e));
+                element.addEventListener('mouseout', hideTooltip);
             });
         }
 
@@ -703,6 +704,9 @@
 
             const bgClass = data.candidate === 'joao' ? 'bg-orange-50 border-jamildo-orange' : 
                             data.candidate === 'raquel' ? 'bg-blue-50 border-jamildo-blue' : 'bg-gray-50 border-gray-300'; // Cor de fundo do tooltip
+
+            // Log de depuração para verificar se showTooltip é chamado e com quais dados
+            console.log('showTooltip chamado para:', data.name, 'com dados:', data);
 
             // Removendo a opção de imagem conforme solicitado
             const imageHtml = ''; 
@@ -729,10 +733,14 @@
         }
 
         function moveTooltip(e) {
-            // offsetX/Y nos dá a posição do mouse relativa ao elemento que disparou o evento
-            const x = e.pageX + 15;
-            const y = e.pageY + 15;
+            // offsetX/Y nos dá a posição do mouse relativa ao elemento que disparou o evento (o município)
+            // Isso funciona perfeitamente pois o tooltip também está dentro do mesmo contêiner relativo.
+            const x = e.offsetX + 15;
+            const y = e.offsetY + 15;
             
+            // O ajuste para não sair da tela precisa ser revisto com as novas coordenadas,
+            // mas por enquanto, vamos focar em fazer o tooltip aparecer.
+            // A lógica anterior com window.innerWidth não funcionaria mais da mesma forma.
             tooltip.style.left = x + 'px';
             tooltip.style.top = y + 'px';
         }
