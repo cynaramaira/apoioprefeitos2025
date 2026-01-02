@@ -485,261 +485,286 @@
         </div>
     </footer>
 
-   <script>
-            // --- CONFIGURAÇÃO ---
-            // ID da sua planilha (verifique se é o mesmo do link que você baixou e funcionou)
-            const SHEET_ID = '2PACX-1vShib7PQcrDNa8GDJqwUZcopaKqJ5azAs8_fG7aYyWCJwLy9bHykiHR7yIQrWRp7cZClH9RFtjq0PqQ';
-            
-            // Definição das Cores
-            const COLORS = {
-                joao: '#f83d03',   // Laranja
-                raquel: '#024796', // Azul
-                neutral: '#e5e7eb', // Cinza (Indefinido)
-                hover: '#333333'
-            };
-            // --------------------
+    <script>
+       // Configuração
+        const SHEET_ID = '2PACX-1vShib7PQcrDNa8GDJqwUZcopaKqJ5azAs8_fG7aYyWCJwLy9bHykiHR7yIQrWRp7cZClH9RFtjq0PqQ';
+        
+        // --- ALTERAÇÃO AQUI: Criamos um número único (timestamp) para evitar que o Google entregue dados velhos ---
+        const cacheBuster = new Date().getTime();
+        
+        // Link CSV direto com o "cacheBuster"
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv&t=${cacheBuster}`;
+        
+        const COLORS = {
+            joao: '#f83d03',   // João Campos
+            raquel: '#024796', // Raquel Lyra
+            neutral: '#e5e7eb',
+            hover: '#333333'
+        };
 
-            // Link CSV base
-            const SHEET_URL = `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?output=csv`;
+        // Estado Global
+        let mapData = {}; 
+        let counts = { joao: 0, raquel: 0 };
 
-            let mapData = {};
-            let counts = { joao: 0, raquel: 0 };
+        const tooltip = document.getElementById('tooltip');
+        const counterJoao = document.getElementById('counter-joao');
+        const counterRaquel = document.getElementById('counter-raquel');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessage = document.getElementById('error-message');
 
-            // Elementos da tela
-            const tooltip = document.getElementById('tooltip');
-            const counterJoao = document.getElementById('counter-joao');
-            const counterRaquel = document.getElementById('counter-raquel');
-            const loadingIndicator = document.getElementById('loading-indicator');
-            const errorMessage = document.getElementById('error-message');
+        // Normaliza o texto para identificar o candidato
+        function detectCandidate(text) {
+            if (!text) return 'neutral';
+            const t = text.toLowerCase().trim();
+            if (t.includes('joão') || t.includes('joao') || t.includes('campos') || t.includes('psb')) return 'joao';
+            if (t.includes('raquel') || t.includes('lyra') || t.includes('psdb') || t.includes('tucan')) return 'raquel';
+            return 'neutral';
+        }
 
-            // Lógica para decidir a cor baseada no texto da planilha
-            function detectCandidate(text) {
-                if (!text) return 'neutral';
-                const t = text.toLowerCase().trim();
-                
-                // Palavras-chave para João Campos
-                if (t.includes('joão') || t.includes('joao') || t.includes('campos') || t.includes('psb') || t.includes('frente popular')) return 'joao';
-                
-                // Palavras-chave para Raquel Lyra
-                if (t.includes('raquel') || t.includes('lyra') || t.includes('psdb') || t.includes('tucan') || t.includes('governadora')) return 'raquel';
-                
-                return 'neutral';
-            }
-
-            // Função para ler o CSV corretamente (mesmo com vírgulas dentro das células)
-            function parseCSVLine(str) {
-                const result = [];
-                let cell = '';
-                let quote = false;
-                for (let i = 0; i < str.length; i++) {
-                    let char = str[i];
-                    if (char === '"' && str[i + 1] === '"') {
-                        cell += '"';
-                        i++;
-                    } else if (char === '"') {
-                        quote = !quote;
-                    } else if (char === ',' && !quote) {
-                        result.push(cell);
-                        cell = '';
-                    } else {
-                        cell += char;
-                    }
+        // Parser de CSV robusto (respeita aspas)
+        function parseCSVLine(str) {
+            const result = [];
+            let cell = '';
+            let quote = false;
+            for (let i = 0; i < str.length; i++) {
+                let char = str[i];
+                if (char === '"' && str[i+1] === '"') {
+                    cell += '"';
+                    i++;
+                } else if (char === '"') {
+                    quote = !quote;
+                } else if (char === ',' && !quote) {
+                    result.push(cell);
+                    cell = '';
+                } else {
+                    cell += char;
                 }
-                result.push(cell);
-                return result;
             }
+            result.push(cell);
+            return result;
+        }
 
-            // --- A MÁGICA DO ANTI-CACHE ACONTECE AQUI ---
-            async function fetchSheetData() {
-                loadingIndicator.style.display = 'flex';
-                errorMessage.style.display = 'none';
+        // Função para tentar baixar os dados com retentativa de proxy
+        async function fetchSheetData() {
+            loadingIndicator.style.display = 'flex';
+            errorMessage.style.display = 'none';
+            errorMessage.innerText = '';
 
-                // Cria um número único baseada na hora atual (ex: 173000123)
-                // Isso faz o navegador achar que é um arquivo novo a cada segundo
-                const cacheBuster = new Date().getTime();
+            // Estratégia de Proxies: Tenta o primeiro, se falhar, tenta o segundo
+            // --- ALTERAÇÃO AQUI: Adicionamos o cacheBuster também na chamada do proxy ---
+            const proxies = [
+                `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}`,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}`
+            ];
 
-                // Tenta baixar usando serviços que permitem acesso externo (CORS)
-                // Adicionamos '&t=' + cacheBuster no final para forçar a atualização
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}&t=${cacheBuster}`,
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}&timestamp=${cacheBuster}`
-                ];
+            let csvText = null;
+            let success = false;
 
-                let csvText = null;
-                let success = false;
-
-                for (const proxyUrl of proxies) {
-                    try {
-                        const response = await fetch(proxyUrl);
-                        if (response.ok) {
-                            csvText = await response.text();
-                            // Verifica se baixou algo válido (não uma página de erro)
-                            if (csvText && csvText.length > 50 && !csvText.trim().startsWith('<!DOCTYPE')) {
-                                success = true;
-                                break;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("Tentativa de proxy falhou, tentando o próximo...");
-                    }
-                }
-
-                if (!success || !csvText) {
-                    loadingIndicator.style.display = 'none';
-                    errorMessage.innerText = "Erro: Não foi possível ler a planilha atualizada. Tente recarregar.";
-                    errorMessage.style.display = 'block';
-                    return;
-                }
-
-                processData(csvText);
-            }
-
-            function processData(csvText) {
+            for (const proxyUrl of proxies) {
                 try {
-                    const rows = csvText.split('\n');
-                    counts = { joao: 0, raquel: 0 };
-                    mapData = {};
-
-                    rows.forEach((row, index) => {
-                        if (!row.trim()) return;
-                        
-                        // Ignora cabeçalho
-                        if (index === 0) return;
-
-                        const cells = parseCSVLine(row);
-                        
-                        // SE A SUA PLANILHA MUDOU A ORDEM DAS COLUNAS, AJUSTE AQUI:
-                        // cells[0] = ID (ex: recife)
-                        // cells[1] = Nome da Cidade
-                        // cells[2] = Nome do Prefeito
-                        // cells[6] = Coluna G (Apoio: João ou Raquel)
-                        
-                        if (cells.length < 2) return;
-
-                        let idText = cells[0].trim();
-                        if (idText === '') return;
-
-                        let cityName = cells[1] ? cells[1].trim() : idText;
-                        let mayorName = cells[2] ? cells[2].trim() : 'Prefeito';
-                        let partyName = cells[4] ? cells[4].trim() : ''; 
-                        
-                        // IMPORTANTE: O código lê a Coluna G (índice 6) para saber a cor
-                        let supportText = cells[6] ? cells[6].trim() : ''; 
-
-                        const candidateKey = detectCandidate(supportText);
-
-                        mapData[idText] = {
-                            id: idText,
-                            name: cityName,
-                            mayor: mayorName,
-                            party: partyName,
-                            candidate: candidateKey
-                        };
-
-                        if (candidateKey === 'joao') counts.joao++;
-                        if (candidateKey === 'raquel') counts.raquel++;
-                    });
-
-                    updateMapColors();
-                    updateCounters();
-                    loadingIndicator.style.display = 'none';
-
-                } catch (error) {
-                    console.error(error);
-                    errorMessage.innerText = "Erro ao processar dados.";
-                    errorMessage.style.display = 'block';
+                    console.log(`Tentando baixar dados...`);
+                    const response = await fetch(proxyUrl);
+                    if (response.ok) {
+                        csvText = await response.text();
+                        if (csvText && csvText.length > 50) { // Validação mínima
+                            success = true;
+                            break; // Sucesso! Sai do loop
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Falha no proxy, tentando próximo...`, e);
                 }
             }
 
-            function updateMapColors() {
-                // Reseta todas as cores para cinza primeiro
-                document.querySelectorAll('#map-container svg path').forEach(p => {
-                    p.style.fill = COLORS.neutral;
-                });
-
-                // Pinta as cidades que temos dados
-                Object.keys(mapData).forEach(cityId => {
-                    const data = mapData[cityId];
-                    const element = document.getElementById(cityId);
-
-                    if (element) {
-                        const color = data.candidate === 'joao' ? COLORS.joao : data.candidate === 'raquel' ? COLORS.raquel : COLORS.neutral;
-                        
-                        // Pinta o elemento (ou filhos se for um grupo)
-                        if (element.tagName.toLowerCase() === 'g') {
-                            element.querySelectorAll('path').forEach(path => path.style.fill = color);
-                        } else {
-                            element.style.fill = color;
-                        }
-
-                        // Atualiza eventos de mouse
-                        // Clonamos para remover listeners antigos e evitar duplicação
-                        const newElement = element.cloneNode(true);
-                        element.parentNode.replaceChild(newElement, element);
-                        
-                        newElement.addEventListener('mouseover', (e) => {
-                            // Traz para frente para o destaque funcionar melhor
-                            if (newElement.parentNode) newElement.parentNode.appendChild(newElement);
-                            showTooltip(e, data);
-                        });
-                        newElement.addEventListener('mousemove', moveTooltip);
-                        newElement.addEventListener('mouseout', hideTooltip);
-                    }
-                });
+            if (!success || !csvText) {
+                showError("Não foi possível conectar à planilha. Verifique sua conexão ou tente recarregar.");
+                return;
             }
 
-            function showTooltip(e, data) {
-                const candidateName = data.candidate === 'joao' ? 'João Campos' : data.candidate === 'raquel' ? 'Raquel Lyra' : 'Indefinido';
-                const colorClass = data.candidate === 'joao' ? 'text-jamildo-orange' : data.candidate === 'raquel' ? 'text-jamildo-blue' : 'text-gray-500';
+            processData(csvText);
+        }
+
+        function processData(csvText) {
+            try {
+                const rows = csvText.split('\n');
                 
-                // Monta o HTML do tooltip
-                tooltip.innerHTML = `
-                    <div class="p-3 border-b border-gray-100 bg-gray-50">
-                        <div class="font-bold text-gray-900">${data.name}</div>
-                        <div class="text-xs text-gray-600">${data.mayor} ${data.party ? '('+data.party+')' : ''}</div>
-                    </div>
-                    <div class="px-3 py-2 bg-white">
-                        <div class="text-[10px] uppercase text-gray-400 font-bold">Tendência 2026</div>
-                        <div class="text-sm font-black ${colorClass}">${candidateName}</div>
-                    </div>
-                `;
-                tooltip.style.display = 'block';
-                moveTooltip(e);
-            }
+                // Reinicia contagem
+                counts = { joao: 0, raquel: 0 };
+                mapData = {};
 
-            function moveTooltip(e) {
-                // Posiciona o tooltip ao lado do mouse
-                tooltip.style.left = (e.pageX + 15) + 'px';
-                tooltip.style.top = (e.pageY + 15) + 'px';
-            }
+                console.log(`Processando ${rows.length} linhas...`);
 
-            function hideTooltip() {
-                tooltip.style.display = 'none';
-            }
+                rows.forEach((row, index) => {
+                    if (!row.trim()) return; 
+                    
+                    const cells = parseCSVLine(row);
+                    
+                    // 0: id, 1: City, 2: Mayor, 3: OldParty, 4: NewParty, 5: PhotoUrl, 6: RAQUEL OU JOÃO?
 
-            function updateCounters() {
-                // Animação simples dos números
-                animateValue(counterJoao, parseInt(counterJoao.innerText), counts.joao, 1000);
-                animateValue(counterRaquel, parseInt(counterRaquel.innerText), counts.raquel, 1000);
-            }
+                    if (cells.length < 2) return;
 
-            function animateValue(obj, start, end, duration) {
-                let startTimestamp = null;
-                const step = (timestamp) => {
-                    if (!startTimestamp) startTimestamp = timestamp;
-                    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                    obj.innerHTML = Math.floor(progress * (end - start) + start);
-                    if (progress < 1) {
-                        window.requestAnimationFrame(step);
-                    } else {
-                        obj.innerHTML = end;
+                    let idText = cells[0].trim(); // ID (ex: abreu_e_lima)
+                    
+                    // Pula cabeçalho
+                    if (index === 0 || idText.toLowerCase() === 'id') return;
+
+                    // Pega dados das colunas específicas
+                    let cityName = cells[1] ? cells[1].trim() : idText;
+                    let mayorName = cells[2] ? cells[2].trim() : 'Prefeito';
+                    let partyName = cells[4] ? cells[4].trim() : (cells[3] ? cells[3].trim() : '');
+                    let photoUrl = cells[5] ? cells[5].trim() : '';
+                    let supportText = cells[6] ? cells[6].trim() : ''; // Coluna 6 é o apoio
+
+                    const candidateKey = detectCandidate(supportText);
+                    
+                    mapData[idText] = {
+                        id: idText,
+                        name: cityName,
+                        mayor: mayorName,
+                        party: partyName,
+                        photo: photoUrl,
+                        candidate: candidateKey,
+                        rawSupport: supportText
+                    };
+
+                    if (candidateKey === 'joao') counts.joao++;
+                    if (candidateKey === 'raquel') counts.raquel++;
+                });
+
+                updateMapColors();
+                updateCounters();
+                loadingIndicator.style.display = 'none';
+
+            } catch (error) {
+                console.error(error);
+                showError("Erro ao processar dados da planilha.");
+            }
+        }
+
+        function showError(msg) {
+            loadingIndicator.style.display = 'none';
+            errorMessage.innerText = msg;
+            errorMessage.style.display = 'block';
+        }
+
+        function updateMapColors() {
+            // Primeiro, reseta todos os paths para a cor neutra
+            document.querySelectorAll('#map-container svg path').forEach(p => {
+                p.style.fill = COLORS.neutral;
+            });
+
+            // Agora, itera sobre os dados que temos e atualiza o mapa
+            Object.keys(mapData).forEach(cityId => {
+                const data = mapData[cityId];
+                const element = document.getElementById(cityId);
+
+                if (!element) {
+                    console.warn(`Elemento não encontrado para o ID: ${cityId}`);
+                    return; // Pula para o próximo
+                }
+
+                // Define a cor baseada no candidato
+                const color = data.candidate === 'joao' ? COLORS.joao :
+                              data.candidate === 'raquel' ? COLORS.raquel :
+                              COLORS.neutral;
+
+                // Se o elemento for um grupo <g>, aplica a cor a todos os <path> filhos
+                if (element.tagName.toLowerCase() === 'g') {
+                    element.querySelectorAll('path').forEach(path => {
+                        path.style.fill = color;
+                    });
+                } else { // Se for um <path> simples
+                    element.style.fill = color;
+                }
+
+                // Adiciona os eventos diretamente ao elemento
+                // IMPORTANTE: Removemos event listeners antigos clonando o elemento
+                const newElement = element.cloneNode(true);
+                element.parentNode.replaceChild(newElement, element);
+
+                newElement.addEventListener('mouseover', (e) => {
+                    // Traz o elemento para a "frente" para garantir que o hover seja visível
+                    if (newElement.parentNode) {
+                        newElement.parentNode.appendChild(newElement);
                     }
-                };
-                window.requestAnimationFrame(step);
+                    showTooltip(e, data)
+                });
+                newElement.addEventListener('mousemove', (e) => moveTooltip(e));
+                newElement.addEventListener('mouseout', hideTooltip);
+            });
+        }
+
+        function showTooltip(e, data) {
+            const candidateName = data.candidate === 'joao' ? 'João Campos' : 
+                                  data.candidate === 'raquel' ? 'Raquel Lyra' : 'Indefinido';
+            
+            const colorClass = data.candidate === 'joao' ? 'text-jamildo-orange' : 
+                               data.candidate === 'raquel' ? 'text-jamildo-blue' : 'text-gray-500';
+
+            const bgClass = data.candidate === 'joao' ? 'bg-orange-50 border-jamildo-orange' : 
+                            data.candidate === 'raquel' ? 'bg-blue-50 border-jamildo-blue' : 'bg-gray-50 border-gray-300'; // Cor de fundo do tooltip
+
+            // Removendo a opção de imagem conforme solicitado
+            const imageHtml = ''; 
+            if (data.photo && data.photo.startsWith('http')) {
+                // imageHtml = `<img src="${data.photo}" class="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm mr-3" onerror="this.style.display='none'">`;
             }
 
-            // Inicia tudo quando a página carregar
-            document.addEventListener('DOMContentLoaded', fetchSheetData);
-        </script>
+            tooltip.innerHTML = `
+                <div class="flex items-center p-3 border-b-2 ${bgClass} bg-opacity-30">
+                    ${imageHtml}
+                    <div>
+                        <div class="font-bold text-gray-900 leading-tight">${data.name}</div>
+                        <div class="text-xs text-gray-600 font-medium">${data.mayor} (${data.party})</div>
+                    </div>
+                </div>
+                <div class="px-3 py-2 bg-white">
+                    <div class="text-xs uppercase tracking-wider text-gray-400 font-bold mb-0.5">Apoio em 2026</div>
+                    <div class="text-sm font-black ${colorClass}">${candidateName}</div>
+                </div>
+            `;
+            
+            tooltip.style.display = 'block';
+            moveTooltip(e);
+        }
+
+        function moveTooltip(e) {
+            // offsetX/Y nos dá a posição do mouse relativa ao elemento que disparou o evento
+            const x = e.pageX + 15;
+            const y = e.pageY + 15;
+            
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+
+        function updateCounters() {
+            animateValue(counterJoao, parseInt(counterJoao.innerText), counts.joao, 1000);
+            animateValue(counterRaquel, parseInt(counterRaquel.innerText), counts.raquel, 1000);
+        }
+
+        function animateValue(obj, start, end, duration) {
+            if (start === end) return;
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                obj.innerHTML = Math.floor(progress * (end - start) + start);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerHTML = end; // Garante o valor final exato
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        // Inicia
+        document.addEventListener('DOMContentLoaded', fetchSheetData);
+
+    </script>
 </body>
 </html>
