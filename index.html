@@ -115,6 +115,21 @@
             </p>
         </div>
 
+        <!-- Buscador -->
+        <div class="mb-6 relative max-w-md mx-auto w-full z-30">
+            <div class="relative">
+                <input type="text" id="city-search" placeholder="Busque um município ou prefeito..." 
+                    class="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 shadow-sm focus:ring-2 focus:ring-jamildo-blue focus:border-transparent outline-none transition-all">
+                <div class="absolute left-3 top-3.5 text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            </div>
+            <div id="search-results" class="absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 max-h-60 overflow-y-auto hidden">
+            </div>
+        </div>
+
         <!-- Status de Carregamento e Erros -->
         <div id="status-container" class="flex justify-center items-center mb-6 min-h-[24px]">
             <div id="loading-indicator" class="flex items-center bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-medium">
@@ -635,6 +650,7 @@
 
                 updateMapColors();
                 updateCounters();
+                if (!window.searchSetupDone) setupSearch(); // Ativa o buscador
                 loadingIndicator.style.display = 'none';
 
             } catch (error) {
@@ -708,10 +724,10 @@
             // Log de depuração para verificar se showTooltip é chamado e com quais dados
             console.log('showTooltip chamado para:', data.name, 'com dados:', data);
 
-            // Removendo a opção de imagem conforme solicitado
-            const imageHtml = ''; 
+            // Reativando a imagem do prefeito
+            let imageHtml = ''; 
             if (data.photo && data.photo.startsWith('http')) {
-                // imageHtml = `<img src="${data.photo}" class="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm mr-3" onerror="this.style.display='none'">`;
+                imageHtml = `<img src="${data.photo}" class="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm mr-3" onerror="this.style.display='none'">`;
             }
 
             tooltip.innerHTML = `
@@ -719,7 +735,7 @@
                     ${imageHtml}
                     <div>
                         <div class="font-bold text-gray-900 leading-tight">${data.name}</div>
-                        <div class="text-xs text-gray-600 font-medium">${data.mayor} (${data.party})</div>
+                        <div class="text-xs text-gray-600 font-medium">Prefeito: ${data.mayor} (${data.party})</div>
                     </div>
                 </div>
                 <div class="px-3 py-2 bg-white">
@@ -733,14 +749,19 @@
         }
 
         function moveTooltip(e) {
-            // offsetX/Y nos dá a posição do mouse relativa ao elemento que disparou o evento (o município)
-            // Isso funciona perfeitamente pois o tooltip também está dentro do mesmo contêiner relativo.
-            const x = e.offsetX + 15;
-            const y = e.offsetY + 15;
+            const container = document.getElementById('map-container');
+            const containerRect = container.getBoundingClientRect();
             
-            // O ajuste para não sair da tela precisa ser revisto com as novas coordenadas,
-            // mas por enquanto, vamos focar em fazer o tooltip aparecer.
-            // A lógica anterior com window.innerWidth não funcionaria mais da mesma forma.
+            let x, y;
+            // Verifica se o evento tem clientX/Y (de um clique simulado) ou offsetX/Y (de um mouseover real)
+            if (e.clientX !== undefined && e.clientY !== undefined) {
+                x = e.clientX - containerRect.left + 15;
+                y = e.clientY - containerRect.top + 15;
+            } else {
+                x = e.offsetX + 15;
+                y = e.offsetY + 15;
+            }
+            
             tooltip.style.left = x + 'px';
             tooltip.style.top = y + 'px';
         }
@@ -768,6 +789,115 @@
                 }
             };
             window.requestAnimationFrame(step);
+        }
+
+        // Função para configurar o buscador após carregar os dados
+        function setupSearch() {
+            window.searchSetupDone = true;
+            const searchInput = document.getElementById('city-search');
+            const resultsContainer = document.getElementById('search-results');
+            const searchBtn = document.getElementById('search-btn');
+
+            // Função para remover acentos e facilitar a busca
+            const normalize = str => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+
+            const performSearch = () => {
+                const term = normalize(searchInput.value);
+                resultsContainer.innerHTML = '';
+                
+                if (term.length < 2) {
+                    resultsContainer.classList.add('hidden');
+                    return;
+                }
+
+                // Filtra os dados que já estão na memória (mapData)
+                const filtered = Object.values(mapData).filter(city => 
+                    (city.name && normalize(city.name).includes(term)) || 
+                    (city.mayor && normalize(city.mayor).includes(term))
+                );
+
+                if (filtered.length > 0) {
+                    resultsContainer.classList.remove('hidden');
+                    filtered.forEach(city => {
+                        const div = document.createElement('div');
+                        div.className = "px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors";
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800">${city.name}</div>
+                            <div class="text-xs text-gray-500">Prefeito: ${city.mayor}</div>
+                        `;
+                        div.onclick = () => {
+                            selectCity(city);
+                            resultsContainer.classList.add('hidden');
+                            searchInput.value = city.name;
+                        };
+                        resultsContainer.appendChild(div);
+                    });
+                } else {
+                    resultsContainer.innerHTML = '<div class="px-4 py-3 text-gray-500 text-sm text-center">Nenhum resultado encontrado</div>';
+                    resultsContainer.classList.remove('hidden');
+                }
+            };
+
+            searchInput.addEventListener('input', performSearch);
+
+            const triggerSelection = () => {
+                performSearch();
+                const firstResult = resultsContainer.querySelector('.cursor-pointer');
+                if (firstResult) firstResult.click();
+            };
+
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Se a lista não estiver visível, força a busca antes de selecionar
+                    if (resultsContainer.classList.contains('hidden')) {
+                        searchInput.dispatchEvent(new Event('input', { bubbles:true }));
+                    }
+                    triggerSelection();
+                }
+            });
+
+            if (searchBtn) searchBtn.addEventListener('click', triggerSelection);
+
+            // Fecha os resultados se o usuário clicar fora do buscador
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !resultsContainer.contains(e.target) && !searchBtn.contains(e.target)) {
+                    resultsContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        function selectCity(city) {
+            // Remove destaques anteriores
+            document.querySelectorAll('.highlight-pulse').forEach(el => el.classList.remove('highlight-pulse'));
+
+            const element = document.getElementById(city.id);
+            if (element) {
+                // Aplica o efeito visual de pulso
+                element.classList.add('highlight-pulse');
+                
+                // Traz para frente no SVG
+                if (element.parentNode) {
+                    element.parentNode.appendChild(element);
+                }
+
+                // Calcula a posição central do município para o Tooltip
+                const rect = element.getBoundingClientRect();
+                
+                const fakeEvent = {
+                    clientX: rect.left + (rect.width / 2),
+                    clientY: rect.top + (rect.height / 2),
+                    target: element
+                };
+                
+                showTooltip(fakeEvent, city);
+                
+                // Faz o scroll suave até o município
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // Remove o destaque após 5 segundos
+                setTimeout(() => element.classList.remove('highlight-pulse'), 5000);
+            }
         }
 
         // Inicia
