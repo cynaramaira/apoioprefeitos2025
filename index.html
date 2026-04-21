@@ -500,6 +500,32 @@
             </div>
         </div>
 
+        <!-- Resumo por Porte da Cidade -->
+        <div class="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-8">
+            <h3 class="text-xl font-bold text-gray-800 mb-6 text-center border-b border-gray-100 pb-4">
+                Resumo de Apoios por Porte do Município
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="size-summary-container">
+                <!-- Preenchido automaticamente via JS -->
+            </div>
+        </div>
+
+        <!-- Adendo Metodológico -->
+        <div class="mt-4 mb-8 text-sm text-gray-500 bg-gray-50 p-6 rounded-xl border border-gray-200">
+            <h4 class="font-bold text-gray-700 mb-2">Sobre os dados populacionais e o porte dos municípios:</h4>
+            <p class="mb-2">
+                A classificação das cidades segue parâmetros frequentemente adotados em estudos acadêmicos baseados nos critérios do IBGE, divididos da seguinte forma:
+            </p>
+            <ul class="list-disc pl-5 mb-3 space-y-1">
+                <li><strong>Pequeno porte:</strong> até 50 mil habitantes.</li>
+                <li><strong>Médio porte:</strong> de 50 mil a 100 mil habitantes.</li>
+                <li><strong>Grande porte:</strong> mais de 100 mil habitantes.</li>
+            </ul>
+            <p>
+                Os números referentes ao tamanho da população foram extraídos da <a href="http://www.bde.pe.gov.br/visualizacao/Visualizacao_formato2.aspx?CodInformacao=288&Cod=3" target="_blank" rel="noopener noreferrer" class="text-jamildo-blue hover:underline font-medium">Base de Dados do Estado de Pernambuco (BDE/PE)</a>, tendo como referência o último Censo Demográfico do IBGE, permitindo a checagem e transparência das informações.
+            </p>
+        </div>
+
     </main>
 
     <!-- Footer -->
@@ -532,6 +558,7 @@
         let mapData = {}; 
         let counts = { joao: 0, raquel: 0 };
         let partySummary = { joao: {}, raquel: {}, neutral: {} };
+        let sizeSummary = { joao: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 }, raquel: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 }, neutral: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 } };
 
         const tooltip = document.getElementById('tooltip');
         const counterJoao = document.getElementById('counter-joao');
@@ -617,6 +644,7 @@
                 // Reinicia contagem
                 counts = { joao: 0, raquel: 0 };
                 partySummary = { joao: {}, raquel: {}, neutral: {} };
+                sizeSummary = { joao: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 }, raquel: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 }, neutral: { 'Pequeno porte': 0, 'Médio porte': 0, 'Grande porte': 0 } };
                 mapData = {};
 
                 console.log(`Processando ${rows.length} linhas...`);
@@ -634,6 +662,7 @@
                     // 4: NewParty
                     // 5: PhotoUrl
                     // 6: RAQUEL OU JOÃO?
+                    // 7: EstimativaPopulação
 
                     if (cells.length < 2) return;
 
@@ -648,6 +677,7 @@
                     let partyName = cells[4] ? cells[4].trim() : (cells[3] ? cells[3].trim() : '');
                     let photoUrl = cells[5] ? cells[5].trim() : '';
                     let supportText = cells[6] ? cells[6].trim() : ''; // Coluna 6 é o apoio
+                    let populationStr = cells[7] ? cells[7].trim() : '';
 
                     const candidateKey = detectCandidate(supportText);
                     
@@ -655,6 +685,18 @@
                     const displayParty = partyName || 'Sem Partido';
                     partySummary[candidateKey][displayParty] = (partySummary[candidateKey][displayParty] || 0) + 1;
                     
+                    // Lógica de Porte do Município
+                    let sizeCategory = 'Desconhecido';
+                    if (populationStr) {
+                        let population = parseInt(populationStr.replace(/\./g, ''), 10);
+                        if (!isNaN(population)) {
+                            if (population > 100000) sizeCategory = 'Grande porte';
+                            else if (population >= 50000) sizeCategory = 'Médio porte';
+                            else sizeCategory = 'Pequeno porte';
+                            sizeSummary[candidateKey][sizeCategory] = (sizeSummary[candidateKey][sizeCategory] || 0) + 1;
+                        }
+                    }
+
                     mapData[idText] = {
                         id: idText,
                         name: cityName,
@@ -662,7 +704,9 @@
                         party: partyName,
                         photo: photoUrl,
                         candidate: candidateKey,
-                        rawSupport: supportText
+                        rawSupport: supportText,
+                        population: populationStr,
+                        size: sizeCategory
                     };
 
                     if (candidateKey === 'joao') counts.joao++;
@@ -752,12 +796,18 @@
                 imageHtml = `<img src="${data.photo}" class="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm mr-3" onerror="this.style.display='none'">`;
             }
 
+            let populationHtml = '';
+            if (data.population && data.size !== 'Desconhecido') {
+                populationHtml = `<div class="text-[11px] text-gray-500 font-medium mt-1 pt-1 border-t border-gray-200">População: ${data.population} hab. <br><span class="text-gray-400">(${data.size})</span></div>`;
+            }
+
             tooltip.innerHTML = `
                 <div class="flex items-center p-3 border-b-2 ${bgClass} bg-opacity-30">
                     ${imageHtml}
                     <div>
                         <div class="font-bold text-gray-900 leading-tight">${data.name}</div>
                         <div class="text-xs text-gray-600 font-medium">Prefeito: ${data.mayor} (${data.party})</div>
+                        ${populationHtml}
                     </div>
                 </div>
                 <div class="px-3 py-2 bg-white">
@@ -825,6 +875,7 @@
         // Renderiza as listas de partidos abaixo do mapa
         function renderSummary() {
             const container = document.getElementById('summary-container');
+            const sizeContainer = document.getElementById('size-summary-container');
             if (!container) return;
 
             const buildList = (partyDict, colorClass) => {
@@ -854,6 +905,39 @@
                     ${buildList(partySummary.neutral, 'text-gray-600')}
                 </div>
             `;
+
+            if (sizeContainer) {
+                const buildSizeList = (sizeDict, colorClass) => {
+                    const order = ['Grande porte', 'Médio porte', 'Pequeno porte'];
+                    const items = order.map(size => {
+                        const count = sizeDict[size] || 0;
+                        if (count === 0) return '';
+                        return `
+                        <li class="flex justify-between items-center text-sm border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+                            <span class="font-medium text-gray-700">${size}</span>
+                            <span class="bg-gray-100 ${colorClass} font-bold px-2 py-0.5 rounded text-xs">${count}</span>
+                        </li>`;
+                    }).filter(html => html !== '').join('');
+                    
+                    if (!items) return '<p class="text-sm text-gray-500 italic mt-2">Nenhum registro.</p>';
+                    return '<ul class="space-y-2 mt-4">' + items + '</ul>';
+                };
+
+                sizeContainer.innerHTML = `
+                    <div class="bg-orange-50/40 p-5 rounded-xl border border-orange-100 shadow-sm">
+                        <h4 class="font-bold text-jamildo-orange flex items-center text-lg"><span class="w-3 h-3 rounded-full bg-jamildo-orange mr-2"></span>João Campos</h4>
+                        ${buildSizeList(sizeSummary.joao, 'text-jamildo-orange')}
+                    </div>
+                    <div class="bg-blue-50/40 p-5 rounded-xl border border-blue-100 shadow-sm">
+                        <h4 class="font-bold text-jamildo-blue flex items-center text-lg"><span class="w-3 h-3 rounded-full bg-jamildo-blue mr-2"></span>Raquel Lyra</h4>
+                        ${buildSizeList(sizeSummary.raquel, 'text-jamildo-blue')}
+                    </div>
+                    <div class="bg-gray-50/60 p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <h4 class="font-bold text-gray-600 flex items-center text-lg"><span class="w-3 h-3 rounded-full bg-gray-300 border border-gray-400 mr-2"></span>Indefinidos / Não Responderam</h4>
+                        ${buildSizeList(sizeSummary.neutral, 'text-gray-600')}
+                    </div>
+                `;
+            }
         }
 
         // Função para configurar o buscador após carregar os dados
