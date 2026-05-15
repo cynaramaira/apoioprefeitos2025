@@ -674,6 +674,11 @@
                     // Pula cabeçalho
                     if (index === 0 || idText.toLowerCase() === 'id') return;
 
+                    // Corrige a divergência entre o ID da planilha e o ID do SVG
+                    if (idText === 'ilha_de_itamaraca') {
+                        idText = 'itamaraca';
+                    }
+
                     // Pega dados das colunas específicas
                     let cityName = cells[1] ? cells[1].trim() : idText;
                     let mayorName = cells[2] ? cells[2].trim() : 'Prefeito';
