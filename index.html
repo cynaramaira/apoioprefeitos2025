@@ -601,48 +601,31 @@
             return result;
         }
 
-        // Função para tentar baixar os dados com retentativa de proxy
+        // Busca direta sem proxies intermediários
         async function fetchSheetData() {
             loadingIndicator.style.display = 'flex';
             errorMessage.style.display = 'none';
             errorMessage.innerText = '';
 
-            // Estratégia de Proxies: Tenta o primeiro, se falhar, tenta o segundo
-            const proxies = [
-                `https://corsproxy.io/?${encodeURIComponent(SHEET_URL)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(SHEET_URL)}`
-            ];
-
-            let csvText = null;
-            let success = false;
-
-            for (const proxyUrl of proxies) {
-                try {
-                    console.log(`Tentando baixar dados via: ${proxyUrl.substring(0, 30)}...`);
-                    const response = await fetch(proxyUrl);
-                    if (response.ok) {
-                        csvText = await response.text();
-                        if (csvText && csvText.length > 50) { // Validação mínima
-                            success = true;
-                            break; // Sucesso! Sai do loop
-                        }
-                    }
-                } catch (e) {
-                    console.warn(`Falha no proxy ${proxyUrl}:`, e);
+            try {
+                const response = await fetch(SHEET_URL);
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
                 }
+                const csvText = await response.text();
+                if (!csvText || csvText.length < 50) {
+                    throw new Error("Dados vazios ou inválidos");
+                }
+                processData(csvText);
+            } catch (error) {
+                console.error("Falha ao buscar dados:", error);
+                showError("Não foi possível conectar à planilha. Verifique a conexão ou a publicação na web.");
             }
-
-            if (!success || !csvText) {
-                showError("Não foi possível conectar à planilha. Verifique sua conexão ou tente recarregar.");
-                return;
-            }
-
-            processData(csvText);
         }
 
         function processData(csvText) {
             try {
-                const rows = csvText.split('\n');
+                const rows = csvText.replace(/\r/g, '').split('\n');
                 
                 // Reinicia contagem
                 counts = { joao: 0, raquel: 0 };
