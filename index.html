@@ -608,7 +608,7 @@
             errorMessage.innerText = '';
 
             try {
-                const response = await fetch(SHEET_URL);
+                const response = await fetch(`${SHEET_URL}&t=${Date.now()}`, { cache: 'no-store' });
                 if (!response.ok) {
                     throw new Error(`Erro HTTP: ${response.status}`);
                 }
